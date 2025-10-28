@@ -14,6 +14,7 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/integration-test.yml
+    secrets: inherit
 
   release:
     name: release

@@ -1,0 +1,96 @@
+name: Integration Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 20 * * 3'
+
+permissions: {}
+
+jobs:
+  integration-test:
+    name: Integration test
+    runs-on: ubuntu-latest
+    environment: integration-test
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      job_id: ${{ steps.validate-secrets.outputs.job_id }}
+    steps:
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - name: Get Secrets
+      id: get-secrets
+      uses: ./
+    - name: Validate secrets
+      id: validate-secrets
+      env:
+        CHECK_RUN_ID: ${{ job.check_run_id }}
+        SECRETS: ${{ steps.get-secrets.outputs.secrets }}
+        FOO_EXPECTED: ${{ secrets.FOO_EXPECTED }}
+        BAR_EXPECTED: ${{ secrets.BAR_EXPECTED }}
+      run: |
+        if [[ -z "$SECRETS" ]]; then
+          echo "::error::Failed to retrieve secrets"
+          exit 1
+        fi
+        if [[ "$(echo $SECRETS | jq 'length')" -ne 2 ]]; then
+          echo "::error::Expected 2 secrets"
+          exit 1
+        fi
+        if [[ "${{ fromJSON(env.SECRETS).FOO }}" != "$FOO_EXPECTED" ]]; then
+          echo "::error::Unexpected value for FOO secret"
+          exit 1
+        fi
+        if [[ "${{ fromJSON(env.SECRETS).BAR }}" != "$BAR_EXPECTED" ]]; then
+          echo "::error::Unexpected value for BAR secret"
+          exit 1
+        fi
+        if [[ -n "${{ fromJSON(env.SECRETS).BAZ }}" ]]; then
+          echo "::error::Expected BAZ secret to not be present"
+          exit 1
+        fi
+        echo "Successfully validated secrets"
+        echo "FOO=${{ fromJSON(env.SECRETS).FOO }}"
+        echo "BAR=${{ fromJSON(env.SECRETS).BAR }}"
+        echo "job_id=$CHECK_RUN_ID" >> "$GITHUB_OUTPUT"
+  confirm-masking:
+    name: Confirm secret masking in logs
+    runs-on: ubuntu-latest
+    needs: integration-test
+    permissions:
+      actions: read
+    steps:
+    - name: Check logs for masked secrets
+      env:
+        PREVIOUS_JOB_ID: ${{ needs.integration-test.outputs.job_id }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        LOGS=$(curl -sS -L \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${GH_TOKEN}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          -w "\n%{http_code}" \
+          ${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/jobs/${PREVIOUS_JOB_ID}/logs)
+        # Extract status code and body
+        HTTP_CODE=$(echo "$LOGS" | tail -n1)
+        BODY=$(echo "$LOGS" | sed '$d')
+        if [[ "$HTTP_CODE" != "200" ]]; then
+          echo "::error::Failed to get logs. Status: $HTTP_CODE"
+          exit 1
+        fi
+        # Confirm the logs contain the success string
+        if [[ ! "$LOGS" =~ "Successfully validated secrets" ]]; then
+          echo "::error::Substring 'Successfully validated secrets' not found in logs."
+          exit 1
+        fi
+        # Confirm the logs contain no secrets
+        if [[ "$LOGS" =~ "HelloWorld" || "$LOGS" =~ "GoodbyeWorld" ]]; then
+          echo "::error::Secret values were found unmasked in the logs."
+          exit 1
+        fi

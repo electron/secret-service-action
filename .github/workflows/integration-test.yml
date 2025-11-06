@@ -32,8 +32,6 @@ jobs:
       env:
         CHECK_RUN_ID: ${{ job.check_run_id }}
         SECRETS: ${{ steps.get-secrets.outputs.secrets }}
-        FOO_EXPECTED: ${{ secrets.FOO_EXPECTED }}
-        BAR_EXPECTED: ${{ secrets.BAR_EXPECTED }}
       run: |
         if [[ -z "$SECRETS" ]]; then
           echo "::error::Failed to retrieve secrets"
@@ -43,11 +41,11 @@ jobs:
           echo "::error::Expected 2 secrets"
           exit 1
         fi
-        if [[ "${{ fromJSON(env.SECRETS).FOO }}" != "$FOO_EXPECTED" ]]; then
+        if [[ "${{ fromJSON(env.SECRETS).FOO }}" != "$(echo 'dlroWolleH' | rev)" ]]; then
           echo "::error::Unexpected value for FOO secret"
           exit 1
         fi
-        if [[ "${{ fromJSON(env.SECRETS).BAR }}" != "$BAR_EXPECTED" ]]; then
+        if [[ "${{ fromJSON(env.SECRETS).BAR }}" != "$(echo 'dlroWeybdooG' | rev)" ]]; then
           echo "::error::Unexpected value for BAR secret"
           exit 1
         fi

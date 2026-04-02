@@ -24,6 +24,8 @@ jobs:
       job_id: ${{ steps.validate-secrets.outputs.job_id }}
     steps:
     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      with:
+        persist-credentials: false
     - name: Get Secrets
       id: get-secrets
       uses: ./
@@ -41,21 +43,21 @@ jobs:
           echo "::error::Expected 2 secrets"
           exit 1
         fi
-        if [[ "${{ fromJSON(env.SECRETS).FOO }}" != "$(echo 'dlroWolleH' | rev)" ]]; then
+        if [[ "$(echo $SECRETS | jq -r '.FOO')" != "$(echo 'dlroWolleH' | rev)" ]]; then
           echo "::error::Unexpected value for FOO secret"
           exit 1
         fi
-        if [[ "${{ fromJSON(env.SECRETS).BAR }}" != "$(echo 'dlroWeybdooG' | rev)" ]]; then
+        if [[ "$(echo $SECRETS | jq -r '.BAR')" != "$(echo 'dlroWeybdooG' | rev)" ]]; then
           echo "::error::Unexpected value for BAR secret"
           exit 1
         fi
-        if [[ -n "${{ fromJSON(env.SECRETS).BAZ }}" ]]; then
+        if [[ -n "$(echo $SECRETS | jq -r '.BAZ // empty')" ]]; then
           echo "::error::Expected BAZ secret to not be present"
           exit 1
         fi
         echo "Successfully validated secrets"
-        echo "FOO=${{ fromJSON(env.SECRETS).FOO }}"
-        echo "BAR=${{ fromJSON(env.SECRETS).BAR }}"
+        echo "FOO=$(echo $SECRETS | jq -r '.FOO')"
+        echo "BAR=$(echo $SECRETS | jq -r '.BAR')"
         echo "job_id=$CHECK_RUN_ID" >> "$GITHUB_OUTPUT"
   confirm-masking:
     name: Confirm secret masking in logs

@@ -14,7 +14,8 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/integration-test.yml
-    secrets: inherit
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     name: release
@@ -28,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
       - name: Run semantic release
         uses: electron/semantic-trusted-release@5eceb399ac8de8863205cf6e34109bce473ba566 # v1.0.1
         with:

@@ -16,7 +16,9 @@ jobs:
   integration-test:
     name: Integration test
     runs-on: ubuntu-latest
-    environment: integration-test
+    environment:
+      name: integration-test
+      deployment: false
     permissions:
       contents: read
       id-token: write

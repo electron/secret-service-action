@@ -43,9 +43,46 @@ runs:
           echo "::error::Failed to exchange token. Status: $HTTP_CODE"
           exit 1
         fi
-        # Extract and mask the secrets
-        readarray -t SECRET_VALUES < <(echo "$BODY" | jq -r 'values | .[]')
-        for secret in "${SECRET_VALUES[@]}"; do
-          echo "::add-mask::$secret"
+        # Validate the response is a flat JSON object whose every value is a string,
+        # then re-serialize it canonically (compact) with jq. Fail closed on any other
+        # shape (invalid JSON, bare string, array, nested/wrapped object, non-string
+        # values) so we never publish a body for which masks were not registered.
+        # 2>/dev/null prevents jq from echoing offending response content into the log.
+        if ! CANONICAL=$(echo "$BODY" | jq -ce \
+            'if (type == "object") and ([.[] | type] | all(. == "string")) then . else error end' \
+            2>/dev/null); then
+          echo "::error::Secret service returned an unexpected response shape; aborting to prevent secret leakage"
+          exit 1
+        fi
+        # A single valid JSON object always serializes to one line; a literal newline
+        # here means the body contained multiple concatenated top-level values (trailing
+        # bytes). Reject it: it would also write malformed multi-line data to the output.
+        if [[ "$CANONICAL" == *$'\n'* ]]; then
+          echo "::error::Secret service response contained trailing data; aborting to prevent secret leakage"
+          exit 1
+        fi
+        # add_mask registers each value. Workflow-command data is unescaped by the runner
+        # (%25->% %0D->CR %0A->LF), so we percent-encode those bytes; this also prevents a
+        # CR in a value from terminating the ::add-mask:: line early and injecting a command
+        # (e.g. ::stop-commands::) that would disable masking for the remaining secrets.
+        emit_mask() {
+          local v="${1//%/%25}"
+          v="${v//$'\r'/%0D}"
+          v="${v//$'\n'/%0A}"
+          echo "::add-mask::$v"
+        }
+        # Mask the exact bytes each secret occupies inside the emitted JSON. @json yields
+        # the value's serialized form (quoted); stripping the quotes gives the precise
+        # substring present in CANONICAL, so redaction does not depend on the runner's
+        # masker independently re-deriving jq's escaping.
+        readarray -t SERIALIZED < <(echo "$CANONICAL" | jq -r '.[] | @json')
+        for s in "${SERIALIZED[@]}"; do
+          emit_mask "${s:1:-1}"
         done
-        echo "secrets=$BODY" >> $GITHUB_OUTPUT
+        # Also mask the decoded value, for consumers that parse the output (e.g.
+        # fromJSON(...).TOKEN) and print the raw secret.
+        readarray -t DECODED < <(echo "$CANONICAL" | jq -r '.[]')
+        for d in "${DECODED[@]}"; do
+          emit_mask "$d"
+        done
+        echo "secrets=$CANONICAL" >> $GITHUB_OUTPUT

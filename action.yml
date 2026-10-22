@@ -5,7 +5,7 @@ inputs:
   endpoint:
     description: The secret service endpoint to exchange the OIDC token for secrets
     required: false
-    default: https://electron-secret-service-dc455692df42.herokuapp.com/exchange
+    default: https://secret-service.electronjs.org/exchange
 
 outputs:
   secrets:

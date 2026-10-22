@@ -30,6 +30,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Run semantic release
-        uses: electron/semantic-trusted-release@5eceb399ac8de8863205cf6e34109bce473ba566 # v1.0.1
+        uses: electron/semantic-trusted-release@672a62fe17fce21a0d10de5a6825ee54817af317 # v1.1.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
